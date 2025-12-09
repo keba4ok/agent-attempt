@@ -44,6 +44,7 @@ results_dpaia/
 results_swe/
 statistics/
 repos/
+tasks/
 swebench_verified.jsonl
 tools_raw.json
 tool_usage_stats.json

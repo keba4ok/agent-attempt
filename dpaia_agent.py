@@ -56,7 +56,6 @@ def setup_repository(repo: str, base_path: Optional[str] = None, instance_id: Op
     
     repo_path = instance_path / repo_name
 
-    # Always clone fresh for each instance
     logger.info(f"Cloning {repo} into new instance: {instance_id}...")
     github_url = f"https://github.com/{repo}.git"
     try:
@@ -66,7 +65,6 @@ def setup_repository(repo: str, base_path: Optional[str] = None, instance_id: Op
         logger.error(f"Failed to clone repository: {e.stderr}")
         raise Exception(f"Failed to clone: {e.stderr}")
 
-    # Checkout main/master
     try:
         subprocess.run(["git", "checkout", "main"], cwd=repo_path, check=True, capture_output=True)
     except subprocess.CalledProcessError:
@@ -89,12 +87,16 @@ class MCPAutonomousAgent:
         self.connection_failures = 0
         self.max_connection_failures = 3
 
-    async def connect_to_sse_server(self, server_url: str, timeout: int = 30):
+    async def connect_to_sse_server(self, server_url: str, timeout: int = 30, sse_read_timeout: float | None = 3600):
         logger.info(f"Connecting to MCP server: {server_url}")
         self.server_url = server_url
 
         try:
-            self._streams_context = sse_client(url=server_url)
+            self._streams_context = sse_client(
+                url=server_url,
+                timeout=timeout,
+                sse_read_timeout=sse_read_timeout,
+            )
             streams = await asyncio.wait_for(
                 self._streams_context.__aenter__(),
                 timeout=timeout
@@ -212,12 +214,59 @@ WORKFLOW:
 2. Explore project - use list_directory_tree, find_jpa_entity, find_spring_data_repositories
 3. Read relevant files - use get_file_text_by_path to understand existing code
 4. Implement changes - use specific tools or create_new_file, replace_text_in_file
-5. Build - run build_project to verify compilation
-6. Test - run specific tests to verify changes
+5. Build - run build_project or get_file_problems to verify compilation
+6. Test - run specific tests using tools to verify changes
 7. Complete - when all requirements met and tests pass, respond with: TASK_COMPLETE
 
 Think step-by-step and use appropriate tools.
 """
+
+# EXTREMELY IMPORTANT: For solving a task you should absolutely use some of the following tools:
+#     create_or_update_entity_attribute
+#     find_jpa_entity
+#     create_jpa_entity
+#     create_spring_data_repository
+#     generate_db_migration
+#     generate_jpa_entity
+#     generate_jpa_repository
+#     get_jpa_entity_by_name
+#     find_spring_data_repositories
+#     create_jpa_query
+#     reverse_engineering_jpa_entity_by_name
+# These tools are most important for solving tasks from current benchmark.
+# You should ABSOLUTELY use some of these tools to solve the task.
+
+# EXTREMELY IMPORTANT: For solving a task you should absolutely use these tools:
+#     [Critical]
+#     find_jpa_entities
+#     find_jpa_entity
+#     get_jpa_entity_by_name
+#     find_spring_data_repositories
+#     create_jpa_query
+#     create_spring_data_repository
+#     generate_jpa_repository 
+#     create_jpa_entity
+#     generate_jpa_entity
+#     create_or_update_entity_attribute
+#     generate_db_migration
+# IT IS EXTREMELY IMPORTANT TO USE THESE TOOLS TO SOLVE THE CURRENT TASK.
+# YOU SHOULD PREFER THESE TOOLS OVER OTHER TOOLS WHENEVER POSSIBLE.
+
+# IMPORTANT: You should also use the following tools:
+# [Relevant] 
+#     generate_aggregate_query
+#     execute_run_configuration
+#     get_run_configurations
+#     find_files_by_name_keyword
+#     get_file_text_by_path
+#     replace_text_in_file
+#     get_symbol_info
+#     execute_terminal_command
+#     get_related_domain_items
+#     get_logical_or_architectural_map
+#     find_liquibase_scripts
+#     create_new_file
+# Prefer these tools over other tools when solving the current task when possible.
 
         messages: List[Dict] = [{"role": "user", "content": system_prompt}]
 
