@@ -2,8 +2,12 @@ import asyncio
 import json
 import os
 import sys
+import argparse
+import logging
 from typing import Optional, List, Dict
 from contextlib import AsyncExitStack
+from pathlib import Path
+from datetime import datetime
 
 from mcp import ClientSession
 from mcp.client.sse import sse_client
@@ -13,10 +17,20 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-from pathlib import Path
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    datefmt='%Y-%m-%d %H:%M:%S'
+)
+logger = logging.getLogger(__name__)
 
-def load_swebench_instance(instance_id: str, dataset_path: str = "~/swe-mcp-demo/swebench_verified.jsonl") -> dict:
-    dataset_path = Path(dataset_path).expanduser().resolve()
+
+def load_swebench_instance(instance_id: str, dataset_path: Optional[str] = None) -> dict:
+    if dataset_path is None:
+        script_dir = Path(__file__).parent.resolve()
+        dataset_path = script_dir / "swebench_verified.jsonl"
+    else:
+        dataset_path = Path(dataset_path).expanduser().resolve()
 
     if not dataset_path.exists():
         raise FileNotFoundError(f"SWE-bench dataset not found at {dataset_path}")
@@ -51,7 +65,7 @@ class MCPAutonomousAgent:
         self.max_connection_failures = 3
 
     async def connect_to_sse_server(self, server_url: str, timeout: int = 30):
-        print(f"Connecting to MCP runtime: {server_url}")
+        logger.info(f"Connecting to MCP runtime: {server_url}")
         self.server_url = server_url
 
         try:
@@ -68,36 +82,36 @@ class MCPAutonomousAgent:
             response = await self.session.list_tools()
             self.tools = response.tools
 
-            print("Connected. Available tools:", [tool.name for tool in self.tools])
+            logger.info(f"Connected. Available tools: {[tool.name for tool in self.tools]}")
             self.connection_failures = 0
         except asyncio.TimeoutError:
-            print(f"Connection timeout after {timeout}s")
+            logger.error(f"Connection timeout after {timeout}s")
             raise
         except Exception as e:
-            print(f"Connection failed: {e}")
+            logger.error(f"Connection failed: {e}")
             raise
 
     async def reconnect(self):
         if self.connection_failures >= self.max_connection_failures:
-            print(f"Max reconnection attempts ({self.max_connection_failures}) reached")
+            logger.error(f"Max reconnection attempts ({self.max_connection_failures}) reached")
             return False
 
-        print(f"Attempting to reconnect (attempt {self.connection_failures + 1}/{self.max_connection_failures})...")
+        logger.warning(f"Attempting to reconnect (attempt {self.connection_failures + 1}/{self.max_connection_failures})...")
         self.connection_failures += 1
 
         try:
             await self.cleanup(silent=True)
             await asyncio.sleep(2)
             await self.connect_to_sse_server(self.server_url, timeout=30)
-            print("Reconnection successful!")
+            logger.info("Reconnection successful!")
             return True
         except Exception as e:
-            print(f"Reconnection failed: {e}")
+            logger.error(f"Reconnection failed: {e}")
             return False
 
     async def cleanup(self, silent=False):
         if not silent:
-            print("Cleaning up session...")
+            logger.info("Cleaning up session...")
         try:
             if hasattr(self, "_session_context"):
                 await self._session_context.__aexit__(None, None, None)
@@ -105,7 +119,7 @@ class MCPAutonomousAgent:
                 await self._streams_context.__aexit__(None, None, None)
         except Exception as e:
             if not silent:
-                print(f"Cleanup error: {e}")
+                logger.error(f"Cleanup error: {e}")
 
     async def call_tool_with_retry(self, tool_name: str, tool_args: dict, timeout: int = 30) -> tuple[bool, str]:
         max_retries = 2
@@ -119,7 +133,7 @@ class MCPAutonomousAgent:
                 return True, str(result.content)
 
             except asyncio.TimeoutError:
-                print(f"Tool call timeout (attempt {attempt + 1}/{max_retries})")
+                logger.warning(f"Tool call timeout (attempt {attempt + 1}/{max_retries})")
                 if attempt < max_retries - 1:
                     reconnected = await self.reconnect()
                     if not reconnected:
@@ -130,7 +144,7 @@ class MCPAutonomousAgent:
             except Exception as e:
                 error_msg = str(e)
                 if "Connection closed" in error_msg or "ReadTimeout" in error_msg:
-                    print(f"Connection error (attempt {attempt + 1}/{max_retries}): {error_msg}")
+                    logger.warning(f"Connection error (attempt {attempt + 1}/{max_retries}): {error_msg}")
                     if attempt < max_retries - 1:
                         reconnected = await self.reconnect()
                         if not reconnected:
@@ -146,7 +160,7 @@ class MCPAutonomousAgent:
         if self.environment_ready:
             return True
 
-        print("Setting up environment...")
+        logger.info("Setting up environment...")
 
         try:
             success, result = await self.call_tool_with_retry(
@@ -156,15 +170,15 @@ class MCPAutonomousAgent:
             )
 
             if success:
-                print(f"Environment setup complete")
+                logger.info("Environment setup complete")
                 self.environment_ready = True
                 return True
             else:
-                print(f"Environment setup failed: {result}")
+                logger.warning(f"Environment setup failed: {result}")
                 return False
 
         except Exception as e:
-            print(f"Environment setup failed: {e}")
+            logger.error(f"Environment setup failed: {e}")
             return False
 
     async def run_task(self, task: Dict, max_steps: int = 20):
@@ -175,7 +189,7 @@ class MCPAutonomousAgent:
 
         env_ok = await self.setup_environment(repo_path)
         if not env_ok:
-            print("Proceeding without full environment setup...")
+            logger.warning("Proceeding without full environment setup...")
 
         system_prompt = f"""
 You are an autonomous software engineer working on a bug fix.
@@ -248,12 +262,12 @@ Always reason step-by-step and use the most efficient tool for each task.
                 "input_schema": tool.inputSchema
             })
 
-        print(f"Starting autonomous agent loop (max {max_steps} steps)...\n")
+        logger.info(f"Starting autonomous agent loop (max {max_steps} steps)...")
 
         for step in range(max_steps):
-            print(f"\n{'='*60}")
-            print(f"Step {step + 1}/{max_steps}")
-            print('='*60)
+            logger.info(f"{'='*60}")
+            logger.info(f"Step {step + 1}/{max_steps}")
+            logger.info('='*60)
 
             try:
                 response = await asyncio.to_thread(
@@ -279,7 +293,7 @@ Always reason step-by-step and use the most efficient tool for each task.
                         })
 
                         if "TASK_COMPLETE" in text:
-                            print("Task marked as complete by Claude.")
+                            logger.info("Task marked as complete by Claude.")
                             task_complete = True
 
                     elif content.type == "tool_use":
@@ -448,30 +462,83 @@ Always reason step-by-step and use the most efficient tool for each task.
                     "content": f"An error occurred: {str(e)}. Please try a different approach."
                 })
 
-        print(f"\nReached max steps ({max_steps}) without TASK_COMPLETE.")
+        logger.warning(f"Reached max steps ({max_steps}) without TASK_COMPLETE.")
         return False
 
 
 async def main():
-    # Example task
-    instance_id = "astropy__astropy-13579"
-    raw = load_swebench_instance(instance_id)
+    parser = argparse.ArgumentParser(
+        description='SWE-bench Autonomous Agent',
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  # Use default instance ID
+  python swe_agent.py
+
+  # Specify instance ID
+  python swe_agent.py --instance-id astropy__astropy-13579
+
+  # Custom model and steps
+  python swe_agent.py --instance-id django__django-12345 --model claude-3-5-sonnet-20241022 --max-steps 100
+
+  # Custom dataset path
+  python swe_agent.py --instance-id sympy__sympy-67890 --dataset-path /path/to/swebench_verified.jsonl
+        """
+    )
+    
+    parser.add_argument('--instance-id', type=str, default='astropy__astropy-13579',
+                        help='SWE-bench instance ID')
+    parser.add_argument('--dataset-path', type=str, help='Path to SWE-bench dataset JSONL file')
+    parser.add_argument('--mcp-url', type=str, help='MCP server URL (overrides env var)')
+    parser.add_argument('--model', type=str, default='claude-3-5-haiku-20241022', help='Claude model to use')
+    parser.add_argument('--max-tokens', type=int, default=4096, help='Max tokens per request')
+    parser.add_argument('--max-steps', type=int, default=50, help='Maximum agent steps')
+    parser.add_argument('--log-level', type=str, default='INFO', choices=['DEBUG', 'INFO', 'WARNING', 'ERROR'],
+                        help='Logging level')
+    
+    args = parser.parse_args()
+    
+    logging.getLogger().setLevel(getattr(logging, args.log_level))
+    
+    try:
+        raw = load_swebench_instance(args.instance_id, args.dataset_path)
+    except FileNotFoundError as e:
+        logger.error(f"Dataset not found: {e}")
+        logger.info("Run 'python download_bench.py' to download the dataset first.")
+        sys.exit(1)
+    except ValueError as e:
+        logger.error(f"Instance not found: {e}")
+        sys.exit(1)
+
+    script_dir = Path(__file__).parent.resolve()
+    repos_dir = script_dir / "repos"
+    repo_name = raw['repo'].split('/')[-1]
+    repo_path = repos_dir / repo_name
 
     TASK = {
         "repo": raw["repo"],
         "commit": raw["base_commit"],
-        "repo_path": f"/Users/ivan.kabashnyi/swe-mcp-demo/repos/{raw['repo'].split('/')[-1]}",
+        "repo_path": str(repo_path),
         "problem": raw["problem_statement"],
     }
 
     agent = MCPAutonomousAgent(
-        model="claude-3-5-haiku-20241022",
-        max_tokens=4096
+        model=args.model,
+        max_tokens=args.max_tokens
     )
 
-    from datetime import datetime
-    log_path = f"agent_log_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt"
-    log_file = open(log_path, "w", encoding="utf-8")
+    logs_dir = script_dir / "results_swe" / repo_name
+    logs_dir.mkdir(parents=True, exist_ok=True)
+    instance_timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+    log_path = logs_dir / f"agent_log_{instance_timestamp}.txt"
+    
+    file_handler = logging.FileHandler(log_path, encoding='utf-8')
+    file_handler.setLevel(logging.DEBUG)
+    file_formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+    file_handler.setFormatter(file_formatter)
+    logging.getLogger().addHandler(file_handler)
+    
+    log_file = open(log_path, "a", encoding="utf-8")
     orig_stdout = sys.stdout
 
     class TeeLogger:
@@ -488,28 +555,36 @@ async def main():
     sys.stdout = TeeLogger(orig_stdout, log_file)
 
     try:
-        server_url = os.getenv("MCP_SERVER_URL", "http://127.0.0.1:64342/sse")
+        server_url = args.mcp_url or os.getenv("MCP_SERVER_URL", "http://127.0.0.1:64342/sse")
         await agent.connect_to_sse_server(server_url, timeout=30)
 
-        success = await agent.run_task(TASK, max_steps=50)
+        logger.info(f"Instance ID: {args.instance_id}")
+        logger.info(f"Repository: {TASK['repo']}")
+        logger.info(f"Commit: {TASK['commit']}")
+        logger.info(f"Repository Path: {TASK['repo_path']}")
+
+        success = await agent.run_task(TASK, max_steps=args.max_steps)
 
         if success:
-            print("\n" + "="*60)
-            print("Task completed successfully!")
-            print("="*60)
+            logger.info("="*60)
+            logger.info("Task completed successfully!")
+            logger.info("="*60)
         else:
-            print("\n" + "="*60)
-            print("Task did not complete within step limit.")
-            print("="*60)
+            logger.warning("="*60)
+            logger.warning("Task did not complete within step limit.")
+            logger.warning("="*60)
 
+    except KeyboardInterrupt:
+        logger.warning("Interrupted by user")
     except Exception as e:
-        print(f"\n[FATAL ERROR] {e}")
-        import traceback
-        traceback.print_exc()
+        logger.exception(f"Fatal error: {e}")
     finally:
         await agent.cleanup()
         log_file.close()
         sys.stdout = orig_stdout
+        logging.getLogger().removeHandler(file_handler)
+        file_handler.close()
+        logger.info(f"Log saved to: {log_path}")
 
 
 if __name__ == "__main__":

@@ -16,12 +16,15 @@ def extract_tool_calls_from_log(log_file_path):
 
     return tool_calls
 
-def collect_tool_stats(base_dir='.'):
+def collect_tool_stats(base_dir=None):
     overall_stats = Counter()
     project_stats = defaultdict(Counter)
     file_stats = defaultdict(Counter)
 
-    base_path = Path(base_dir)
+    if base_dir is None:
+        base_path = Path(__file__).parent.resolve()
+    else:
+        base_path = Path(base_dir).resolve()
 
     for folder in ['astropy', 'django', 'sympy']:
         folder_path = base_path / folder
@@ -78,7 +81,21 @@ def print_statistics(overall_stats, project_stats, file_stats):
         for tool, count in stats.most_common():
             print(f"    {tool:38} {count:4}")
 
-def save_statistics_to_json(overall_stats, project_stats, file_stats, output_file='tool_usage_stats.json'):
+def save_statistics_to_json(overall_stats, project_stats, file_stats, output_file=None):
+    if output_file is None:
+        script_dir = Path(__file__).parent.resolve()
+        stats_dir = script_dir / "statistics"
+        stats_dir.mkdir(exist_ok=True)
+        from datetime import datetime
+        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+        output_file = stats_dir / f"tool_usage_stats_{timestamp}.json"
+    else:
+        output_file = Path(output_file)
+        if not output_file.is_absolute():
+            script_dir = Path(__file__).parent.resolve()
+            stats_dir = script_dir / "statistics"
+            stats_dir.mkdir(exist_ok=True)
+            output_file = stats_dir / output_file
     stats = {
         'overall': dict(overall_stats),
         'by_project': {project: dict(stats) for project, stats in project_stats.items()},
@@ -98,7 +115,7 @@ def save_statistics_to_json(overall_stats, project_stats, file_stats, output_fil
 def main():
     print("Collecting tool usage statistics from agent logs...")
 
-    overall_stats, project_stats, file_stats = collect_tool_stats('.')
+    overall_stats, project_stats, file_stats = collect_tool_stats()
 
     if not overall_stats:
         print("No tool usage found in the logs!")

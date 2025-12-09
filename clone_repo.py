@@ -1,12 +1,18 @@
 import subprocess
 import sys
 from pathlib import Path
+from typing import Optional
 
-def clone_and_checkout(repo: str, commit: str, base_dir: Path = Path("repos")) -> Path:
+def clone_and_checkout(repo: str, commit: str, base_dir: Optional[Path] = None) -> Path:
     """
     Clone a GitHub repository and checkout a specific commit.
     Returns the absolute path to the cloned repository.
     """
+    if base_dir is None:
+
+        script_dir = Path(__file__).parent.resolve()
+        base_dir = script_dir / "repos"
+    
     repo_name = repo.split("/")[1]
     repo_dir = base_dir / repo_name
     repo_dir.parent.mkdir(parents=True, exist_ok=True)
@@ -20,7 +26,7 @@ def clone_and_checkout(repo: str, commit: str, base_dir: Path = Path("repos")) -
             check=True,
         )
     else:
-        print(f"✅ Repository already exists at {repo_dir}")
+        print(f"Repository already exists at {repo_dir}")
 
     print(f"Checking out {commit[:8]}...")
     subprocess.run(
@@ -34,7 +40,7 @@ def clone_and_checkout(repo: str, commit: str, base_dir: Path = Path("repos")) -
         check=True,
     )
 
-    print(f"✅ Repository ready at {repo_dir.absolute()}")
+    print(f"Repository ready at {repo_dir.absolute()}")
     return repo_dir.absolute()
 
 

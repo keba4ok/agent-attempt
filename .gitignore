@@ -1,0 +1,60 @@
+# Environment and secrets
+.env
+.env.local
+.env.*.local
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual environments
+venv/
+env/
+ENV/
+.venv/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Results and data (should be in separate results repository)
+results_dpaia/
+results_swe/
+statistics/
+repos/
+swebench_verified.jsonl
+tools_raw.json
+tool_usage_stats.json
+
+# Logs
+*.log
+*.txt
+!README.md
+
+# Temporary files
+*.tmp
+*.bak
+*.cache
+
