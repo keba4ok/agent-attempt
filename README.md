@@ -185,7 +185,7 @@ Configure via command-line arguments:
 
 ## Results Repository
 
-Results (logs, statistics) should be stored in a **separate repository** for team collaboration.
+Results (logs, statistics) should be stored in a **separate repository**.
 
 ### Submodule
 
