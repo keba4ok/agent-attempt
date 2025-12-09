@@ -187,6 +187,23 @@ Configure via command-line arguments:
 
 Results (logs, statistics) should be stored in a **separate repository** for team collaboration.
 
-See [RESULTS_REPO.md](RESULTS_REPO.md) for setup instructions.
+### Submodule
+
+Set up results repository as a git submodule inside this project:
+
+```bash
+# Create results repo on GitHub, then:
+git submodule add <your-org>/intellij-tools-results.git results_repo
+git commit -m "Add results repository as submodule"
+```
+
+Results will be in `results_repo/` directory. 
+
+### Pushing Results
+
+Use the provided script:
+```bash
+./push_results.sh
+```
 
 

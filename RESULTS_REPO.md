@@ -2,43 +2,29 @@
 
 This project generates results (logs, statistics) that should be stored in a separate repository.
 
-## Setup Instructions
+## Submodule stuff
 
-### 1. Create Results Repository
+A git submodule allows you to have a separate repository inside your main repository.
 
-### 2. Configure Results Path (Optional)
+### Setup
 
-You can set an environment variable to automatically push results:
+1. **Create the results repository on GitHub**
 
-```bash
-# In your .env file (optional)
-RESULTS_REPO_PATH=../intellij-tools-results
-```
+2. **Add it as a submodule**
 
-### 3. Results Structure
+3. **Initialize the submodule** 
 
-Results are organized as follows:
+### Using the Submodule
 
-```
-results_dpaia/          # DPAIA agent logs
-  dpaia_agent_TIMESTAMP.txt
+Results will be stored in `results_repo/` directory:
+- `results_repo/results_dpaia/`
+- `results_repo/results_swe/`
+- `results_repo/statistics/`
 
-results_swe/            # SWE agent logs
-  <repo_name>/
-    agent_log_TIMESTAMP.txt
-
-statistics/             # Generated statistics
-  tool_stats_TIMESTAMP.json
-  tool_stats_TIMESTAMP.csv
-  tool_usage_stats_TIMESTAMP.json
-```
-
-### 4. Pushing Results to Repository
+### Pushing Results
 
 Usa a script `push_results.sh`:
 
 ```bash
 chmod +x push_results.sh
 ```
-
-
