@@ -51,7 +51,6 @@ tool_usage_stats.json
 
 # Logs
 *.log
-*.txt
 !README.md
 
 # Temporary files

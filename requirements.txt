@@ -1,0 +1,6 @@
+# Core dependencies
+anthropic>=0.34.0
+mcp>=0.9.0
+python-dotenv>=1.0.0
+datasets>=2.14.0
+
