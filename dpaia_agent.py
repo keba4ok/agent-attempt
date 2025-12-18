@@ -77,7 +77,7 @@ def setup_repository(repo: str, base_path: Optional[str] = None, instance_id: Op
 
 
 class MCPAutonomousAgent:
-    def __init__(self, model: str = "claude-sonnet-4-20250514", max_tokens: int = 8000):
+    def __init__(self, model: str = "claude-haiku-4-5-20251001", max_tokens: int = 8000):
         self.session: Optional[ClientSession] = None
         self.anthropic = Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
         self.model = model
@@ -199,14 +199,14 @@ EXAMPLES OF AVAILABLE TOOLS - USE INTELLIGENTLY:
 - get_related_domain_items - Find related entities/services
 
 - execute_terminal_command - Run shell commands (mvn test, etc.)
-VERY IMPORTANT: Before using execute_terminal_command, ensure that there's no other tools
-that can be used to achieve the same result. Use only when very necessary.
+VERY IMPORTANT: USE THIS COMMAND VERY OFTEN IT'S VERY GOOD
+VERY IMPORTANT: DO NOT USE IT FOR SEVERAL COMMANDS AT ONCE (E.G. USING '&&')
 
 CRITICAL RULES:
 1. ALWAYS read files with get_file_text_by_path - NEVER use cat/grep
 2. Use IntelliJ tools instead of grep/find commands
 3. Keep terminal commands short and specific
-4. Run tests: "cd {repo_path} && mvn test -Dtest=TestClass#testMethod"
+4. Run tests: "mvn test -Dtest=TestClass#testMethod" (IMPORTANT: DO IT SEVERAL TIMES)
 5. Use -Dtest flag for specific tests (faster)
 
 WORKFLOW:
@@ -220,6 +220,9 @@ WORKFLOW:
 
 Think step-by-step and use appropriate tools.
 """
+
+# VERY IMPORTANT: Before using execute_terminal_command, ensure that there's no other tools
+# that can be used to achieve the same result. Use only when very necessary.
 
 # EXTREMELY IMPORTANT: For solving a task you should absolutely use some of the following tools:
 #     create_or_update_entity_attribute
@@ -351,15 +354,16 @@ Think step-by-step and use appropriate tools.
 
                         if tool_name == "execute_terminal_command" and '[TextContent' in result_text:
                             try:
-                                import re
-                                json_match = re.search(r"text='({.*?})'", result_text, re.DOTALL)
-                                if json_match:
-                                    cmd_result = json.loads(json_match.group(1))
-                                    exit_code = cmd_result.get('command_exit_code', '?')
-                                    output = cmd_result.get('command_output', '')
-                                    print(f"\nExit code: {exit_code}")
-                                    print(f"Output:\n{output[:2000]}")
-                                    result_text = json.dumps(cmd_result)
+                                print(result_text)
+                                # import re
+                                # json_match = re.search(r"text='({.*?})'", result_text, re.DOTALL)
+                                # if json_match:
+                                #     cmd_result = json.loads(json_match.group(1))
+                                #     exit_code = cmd_result.get('command_exit_code', '?')
+                                #     output = cmd_result.get('command_output', '')
+                                #     print(f"\nExit code: {exit_code}")
+                                #     print(f"Output:\n{output[:2000]}")
+                                #     result_text = json.dumps(cmd_result)
                             except:
                                 pass
 
@@ -424,7 +428,7 @@ Examples:
     parser.add_argument('--issue-title', type=str, help='Issue title')
     parser.add_argument('--issue-body', type=str, help='Issue description')
     parser.add_argument('--mcp-url', type=str, help='MCP server URL (overrides env var)')
-    parser.add_argument('--model', type=str, default='claude-sonnet-4-20250514', help='Claude model to use')
+    parser.add_argument('--model', type=str, default='claude-haiku-4-5-20251001', help='Claude model to use')
     parser.add_argument('--max-tokens', type=int, default=8000, help='Max tokens per request')
     parser.add_argument('--max-steps', type=int, default=128, help='Maximum agent steps')
     parser.add_argument('--instance-id', type=str, help='Custom instance ID (default: timestamp)')
