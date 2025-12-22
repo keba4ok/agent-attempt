@@ -157,44 +157,50 @@ class CodeGenAgent:
 
         tool_docs = self._generate_tool_wrappers_doc()
 
-        system_prompt = f"""You are a code generation agent that creates COMPLETE, EXECUTABLE Python code to solve Spring Boot development tasks.
+        system_prompt = f"""Generate COMPLETE, EXECUTABLE Python code to solve this Spring Boot task.
 
-Your task is to generate Python code that uses available MCP tools as regular Python functions.
-
-Repository: {repo}
-Issue: {issue_url}
-Title: {issue_title}
-
-Issue Description:
-{issue_body}
-
-Repository Path: {repo_path}
+Repository: {repo} | Issue: {issue_url} | Title: {issue_title}
+Description: {issue_body}
+Project Path: {repo_path}
 
 {tool_docs}
 
-CRITICAL REQUIREMENTS:
-1. Generate COMPLETE, EXECUTABLE Python code - NO placeholders, NO "...", NO incomplete snippets
-2. Use tools as regular Python functions with ALL required parameters (e.g., `entities = find_jpa_entities(projectPath=project_path)`)
-3. Include ALL necessary steps to complete the task from start to finish
-4. Use actual parameter values, not placeholders
-5. Include proper error handling with try/except blocks
-6. Print results at each step for debugging
-7. The code will be executed in an environment where these tool functions are available
+WORKFLOW: 1) EXPLORE (find entities/repos, read files) → 2) ANALYZE (extract patterns/package names) → 3) IMPLEMENT (use discovered values) → 4) VERIFY (build/check)
 
-CODE FORMAT:
-- Start with a comment explaining what the code does
-- Use the actual project_path variable: project_path = "{repo_path}"
-- Call tools with complete parameter lists
-- Handle errors appropriately
-- End with verification steps (e.g., build_project, get_file_problems)
+KEY RULES:
+- CHAIN CALLS: Store results, parse (may be JSON), extract values, use in next call
+- READ FIRST: Always read files with get_file_text_by_path before modifying
+- DISCOVER VALUES: Extract package names from file content, don't hardcode
+- PARSE RESULTS: Tool outputs may be JSON strings (use json.loads) or dicts
 
-DO NOT:
-- Use "..." or placeholders
-- Leave function calls incomplete
-- Skip steps
-- Return code reviews or explanations - ONLY return executable Python code
+EXAMPLE:
+```python
+import json
+import re
 
-Generate the COMPLETE code now."""
+project_path = "{repo_path}"
+
+# 1. Explore
+entities = find_jpa_entities(projectPath=project_path)
+feature_file = get_file_text_by_path(pathInProject="src/.../Feature.java", projectPath=project_path)
+
+# 2. Extract package from file content
+package_match = re.search(r'package\\s+([\\w.]+)', feature_file)
+package_name = package_match.group(1) if package_match else "com.example"
+
+# 3. Use discovered value
+create_jpa_entity(entityPackage=package_name, projectPath=project_path, ...)
+
+# 4. Read before modifying
+old_content = get_file_text_by_path(pathInProject="...", projectPath=project_path)
+new_content = modify_content(old_content)
+replace_text_in_file(oldText=old_content, newText=new_content, ...)
+
+# 5. Verify
+build_project(projectPath=project_path)
+```
+
+NO placeholders, NO "...", use discovered values. Return ONLY executable Python code."""
 
         messages = [{"role": "user", "content": system_prompt}]
 
@@ -214,7 +220,6 @@ Generate the COMPLETE code now."""
                     if content.type == "text":
                         generated_code += content.text
 
-                # Extract code from markdown if present
                 if "```python" in generated_code:
                     start = generated_code.find("```python") + 9
                     end = generated_code.find("```", start)
@@ -226,8 +231,6 @@ Generate the COMPLETE code now."""
                     if end > start:
                         generated_code = generated_code[start:end].strip()
 
-                # Remove any trailing explanations or reviews
-                # Stop at common non-code patterns
                 stop_patterns = ["CODE_COMPLETE", "This is not code", "What's wrong", "What's needed"]
                 for pattern in stop_patterns:
                     idx = generated_code.find(pattern)
@@ -237,35 +240,79 @@ Generate the COMPLETE code now."""
                 logger.info(f"Generated code (iteration {iteration + 1}, length: {len(generated_code)}):")
                 logger.info(f"{generated_code[:500]}...")
 
-                # Check if code looks complete (has actual function calls, not just comments)
                 has_function_calls = any(
                     tool.name in generated_code 
-                    for tool in self.tools[:10]  # Check first 10 tools
+                    for tool in self.tools[:10]
                 )
                 has_no_placeholders = "..." not in generated_code and "..." not in generated_code
                 
-                # If code looks complete or we're at max iterations, return it
                 if (has_function_calls and has_no_placeholders and len(generated_code) > 200) or iteration >= max_iterations - 1:
                     if not has_function_calls or not has_no_placeholders:
                         logger.warning("Code may be incomplete, but returning due to iteration limit")
                     return generated_code
 
-                # Otherwise, ask for improvement
-                improvement_prompt = f"""The generated code is incomplete or has issues. Please generate COMPLETE, EXECUTABLE Python code.
+                improvement_prompt = f"""The generated code needs improvement. Please generate COMPLETE, EXECUTABLE Python code following the workflow pattern.
 
 Current code (may be incomplete):
 ```python
 {generated_code[:1000]}
 ```
 
-REQUIREMENTS:
-1. Generate COMPLETE code with ALL function calls filled in (no "...", no placeholders)
-2. Include ALL required parameters for each tool call
-3. Use actual values, not generic placeholders
-4. Complete ALL steps of the task
-5. Return ONLY the Python code, no explanations
+CRITICAL IMPROVEMENTS NEEDED:
+1. **Follow exploration → analysis → implementation → verification workflow**
+2. **Chain tool calls** - Use results from one call in the next (store in variables, parse results, use discovered values)
+3. **Read files before modifying** - Always use get_file_text_by_path first, then replace_text_in_file
+4. **Discover values** - Don't hardcode package names, entity names, etc. Discover them first
+5. **Complete ALL steps** - Include exploration, reading existing files, making changes, verification
+6. **Use actual discovered values** - Parse results from tool calls and use them in subsequent calls
+7. **NO placeholders** - All function calls must have complete parameters
 
-Generate the complete code now:"""
+EXAMPLE OF GOOD WORKFLOW (CHAINING RESULTS):
+```python
+import json
+import re
+
+project_path = "{repo_path}"
+
+# 1. Explore - discover what exists
+entities_result = find_jpa_entities(projectPath=project_path)
+print(f"Step 1 - Found entities: {{entities_result}}")
+
+# 2. Parse result and extract information
+# Tool results may be JSON strings or dicts - handle both
+if isinstance(entities_result, str):
+    try:
+        entities_data = json.loads(entities_result)
+    except:
+        entities_data = entities_result
+else:
+    entities_data = entities_result
+
+# 3. Use discovered information to read specific files
+# Extract file path from entities_result or use known pattern
+feature_content = get_file_text_by_path(
+    pathInProject="src/main/java/com/sivalabs/ft/features/domain/entities/Feature.java",
+    projectPath=project_path
+)
+print(f"Step 2 - Read Feature entity")
+
+# 4. Parse content to extract values
+package_match = re.search(r'package\\s+([\\w.]+)', feature_content)
+package_name = package_match.group(1) if package_match else None
+print(f"Step 3 - Extracted package: {{package_name}}")
+
+# 5. Use discovered values in next step
+if package_name:
+    result = create_jpa_entity(
+        entityName="Tag",
+        entityPackage=package_name,  # Using discovered value
+        projectPath=project_path,
+        # ... complete parameters
+    )
+    print(f"Step 4 - Created entity using package {{package_name}}")
+```
+
+Generate the complete code following this pattern:"""
                 
                 messages.append({"role": "assistant", "content": generated_code})
                 messages.append({"role": "user", "content": improvement_prompt})
@@ -320,10 +367,8 @@ async def main():
     
     script_dir = Path(__file__).parent.resolve()
     
-    # Generate instance_id early for logging
     instance_id = args.instance_id or datetime.now().strftime('%Y%m%d_%H%M%S')
-    
-    # Setup file logging
+
     logs_dir = script_dir / "results_codegen"
     logs_dir.mkdir(exist_ok=True)
     log_path = logs_dir / f"codegen_agent_{instance_id}.txt"
