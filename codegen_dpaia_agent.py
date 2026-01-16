@@ -113,7 +113,12 @@ Test the fix to ensure all data is loaded correctly with minimal queries.
     
     logger.info(f"Creating new repository instance: {instance_id}")
     
-    repo_path = setup_repository(TASK_CONFIG["repo"], TASK_CONFIG.get("base_path"), instance_id=instance_id)
+    repo_path = setup_repository(
+        TASK_CONFIG["repo"], 
+        TASK_CONFIG.get("base_path"), 
+        instance_id=instance_id,
+        commit=TASK_CONFIG.get("commit")
+    )
     TASK_CONFIG["repo_path"] = repo_path
 
     logger.info(f"Repository ready at: {repo_path}")
